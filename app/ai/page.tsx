@@ -1,315 +1,344 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Users, MessageSquare, Code, Bot, Zap, Brain, Sparkles } from 'lucide-react'
-import Link from 'next/link'
+import { useState, useEffect, useRef } from 'react'
+import { MessageSquare, Code, Brain, Send, Bot, Sparkles, Copy, Check } from 'lucide-react'
 
 type Message = {
   id: string
-  sender: string
+  sender: 'user' | 'ai'
   text: string
   timestamp: Date
-  isAI: boolean
-}
-
-type AITeamMember = {
-  id: string
-  name: string
-  role: string
-  color: string
-  icon: string
-  isActive: boolean
+  files?: Array<{ path: string, content: string }>
 }
 
 export default function AIPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      sender: 'AI Team',
-      text: 'Hello! We\'re your AI development team. Describe what you want to build, and we\'ll discuss it together before coding.',
-      timestamp: new Date(Date.now() - 300000),
-      isAI: true
+      sender: 'ai',
+      text: "I'm your AI developer. Describe what you want to build, and I'll generate the complete Next.js 14 application for you.\n\nExample: 'Build a task management app with drag-drop boards'",
+      timestamp: new Date()
     }
   ])
   const [input, setInput] = useState('')
-  const [isTeamThinking, setIsTeamThinking] = useState(false)
-  const [teamMembers] = useState<AITeamMember[]>([
-    { id: 'tech-lead', name: 'Technical Lead', role: 'Architecture', color: 'bg-blue-500', icon: '⚡', isActive: true },
-    { id: 'designer', name: 'Product Designer', role: 'UI/UX', color: 'bg-pink-500', icon: '🎨', isActive: true },
-    { id: 'frontend', name: 'Frontend Dev', role: 'React', color: 'bg-green-500', icon: '💻', isActive: true },
-    { id: 'backend', name: 'Backend Dev', role: 'APIs', color: 'bg-yellow-500', icon: '🔧', isActive: true },
-    { id: 'pm', name: 'Product Manager', role: 'Strategy', color: 'bg-purple-500', icon: '📊', isActive: true },
-  ])
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [copiedFile, setCopiedFile] = useState<string | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Load from localStorage
+  // Auto-scroll
   useEffect(() => {
-    const saved = localStorage.getItem('ai-team-discussion')
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        setMessages(parsed.map((m: any) => ({
-          ...m,
-          timestamp: new Date(m.timestamp)
-        })))
-      } catch (e) {
-        console.error('Failed to load discussion', e)
-      }
-    }
-  }, [])
-
-  // Save to localStorage
-  useEffect(() => {
-    if (messages.length > 1) {
-      const toSave = messages.map(m => ({
-        ...m,
-        timestamp: m.timestamp.toISOString()
-      }))
-      localStorage.setItem('ai-team-discussion', JSON.stringify(toSave))
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const simulateTeamResponse = async (userMessage: string) => {
-    setIsTeamThinking(true)
-    
-    // Simulate AI team discussion
-    const responses = [
-      { sender: 'Technical Lead', text: `I'll design the architecture for "${userMessage}". Thinking about scalability...` },
-      { sender: 'Product Designer', text: `Working on user flows and wireframes. Focus on intuitive UX.` },
-      { sender: 'Frontend Dev', text: `Preparing component structure with React and Tailwind.` },
-      { sender: 'Backend Dev', text: `Planning API endpoints and database schema.` },
-      { sender: 'Product Manager', text: `Defining MVP scope and success metrics.` },
-    ]
-    
-    for (const response of responses) {
-      await new Promise(resolve => setTimeout(resolve, 600))
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        sender: response.sender,
-        text: response.text,
-        timestamp: new Date(),
-        isAI: true
-      }])
-    }
-    
-    // Final consensus
-    await new Promise(resolve => setTimeout(resolve, 800))
-    setMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      sender: 'AI Team',
-      text: 'Team consensus reached! Ready to build.',
-      timestamp: new Date(),
-      isAI: true
-    }])
-    
-    setIsTeamThinking(false)
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim()) return
-    
+    if (!input.trim() || isGenerating) return
+
     // Add user message
     const userMsg: Message = {
       id: Date.now().toString(),
-      sender: 'You',
+      sender: 'user',
       text: input,
-      timestamp: new Date(),
-      isAI: false
+      timestamp: new Date()
     }
     
     setMessages(prev => [...prev, userMsg])
-    const currentInput = input
+    const userInput = input
     setInput('')
-    
-    // Get AI team response
-    simulateTeamResponse(currentInput)
-  }
+    setIsGenerating(true)
 
-  const clearChat = () => {
-    if (confirm('Clear team discussion?')) {
-      setMessages([messages[0]]) // Keep welcome message
-      localStorage.removeItem('ai-team-discussion')
+    try {
+      // Step 1: AI analyzes requirements
+      const analysisResponse = await fetch('/api/ai-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userInput,
+          history: messages.slice(-10).map(m => ({
+            role: m.sender === 'user' ? 'user' : 'assistant',
+            content: m.text
+          }))
+        })
+      })
+
+      const analysisData = await analysisResponse.json()
+      
+      // Add AI analysis
+      const analysisMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        sender: 'ai',
+        text: analysisData.response,
+        timestamp: new Date()
+      }
+      
+      setMessages(prev => [...prev, analysisMsg])
+
+      // Step 2: Generate actual code
+      const codeResponse = await fetch('/api/generate-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          description: userInput,
+          requirements: analysisData.response
+        })
+      })
+
+      const codeData = await codeResponse.json()
+      
+      // Add code files
+      const codeMsg: Message = {
+        id: (Date.now() + 2).toString(),
+        sender: 'ai',
+        text: `✅ Generated ${codeData.files?.length || 0} files. Copy and paste to GitHub:`,
+        timestamp: new Date(),
+        files: codeData.files || []
+      }
+      
+      setMessages(prev => [...prev, codeMsg])
+
+    } catch (error) {
+      const errorMsg: Message = {
+        id: (Date.now() + 3).toString(),
+        sender: 'ai',
+        text: "I'll generate that for you. Describe your app idea clearly.",
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMsg])
+    } finally {
+      setIsGenerating(false)
     }
   }
 
-  const startBuild = () => {
-    // Pass discussion to builder
-    const discussionText = messages
-      .filter(m => !m.isAI || m.sender !== 'AI Team')
-      .map(m => `${m.sender}: ${m.text}`)
-      .join('\n')
+  const copyFileToClipboard = async (content: string, path: string) => {
+    await navigator.clipboard.writeText(content)
+    setCopiedFile(path)
+    setTimeout(() => setCopiedFile(null), 2000)
+  }
+
+  const copyAllFiles = async () => {
+    const allFiles = messages
+      .flatMap(m => m.files || [])
+      .map(f => `// ${f.path}\n${f.content}\n\n`)
+      .join('')
     
-    window.location.href = `/ai/builder?context=${encodeURIComponent(discussionText)}`
+    await navigator.clipboard.writeText(allFiles)
+    setCopiedFile('ALL')
+    setTimeout(() => setCopiedFile(null), 2000)
+  }
+
+  const uploadRequirements = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files?.length) return
+
+    const file = files[0]
+    const text = await file.text()
+    
+    setInput(`Requirements from ${file.name}:\n${text.substring(0, 1000)}...`)
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-              <Brain className="w-6 h-6 mr-3 text-primary-600" />
-              AI Development Team
-            </h1>
-            <p className="text-gray-600 mt-1">
-              Discuss with your full AI team. When ready, they'll build the app.
-            </p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={clearChat}
-              className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
-            >
-              Clear Chat
-            </button>
-            <button
-              onClick={startBuild}
-              disabled={messages.length <= 1}
-              className="px-5 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-semibold disabled:opacity-50 flex items-center"
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Build App
-            </button>
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 md:p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Brain className="w-7 h-7 md:w-8 md:h-8 mr-3" />
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold">AI Developer</h1>
+                <p className="opacity-90 text-sm md:text-base">Describe → AI builds → Copy to GitHub</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept=".txt,.md,.pdf,.docx"
+                className="hidden"
+              />
+              <button
+                onClick={uploadRequirements}
+                className="text-sm bg-white/20 hover:bg-white/30 px-3 py-2 rounded-lg flex items-center"
+              >
+                📄 Upload Specs
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col lg:flex-row">
-        {/* Chat Area */}
-        <div className="lg:w-2/3 flex flex-col border-r">
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.map((msg) => (
+      <div className="flex-1 flex flex-col max-w-6xl mx-auto w-full p-4">
+        {/* Chat Messages */}
+        <div className="flex-1 overflow-y-auto space-y-6 mb-6">
+          {messages.map((msg) => (
+            <div key={msg.id}>
+              {/* Message Bubble */}
               <div
-                key={msg.id}
-                className={`flex ${msg.sender === 'You' ? 'justify-end' : 'justify-start'}`}
+                className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                    msg.sender === 'You'
-                      ? 'bg-primary-600 text-white rounded-br-none'
-                      : msg.sender === 'AI Team'
-                      ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white'
-                      : 'bg-gray-100 text-gray-900 rounded-bl-none border'
+                  className={`max-w-full md:max-w-3xl rounded-2xl px-4 py-3 md:px-5 md:py-4 ${
+                    msg.sender === 'user'
+                      ? 'bg-blue-600 text-white rounded-br-none'
+                      : 'bg-white text-gray-900 rounded-bl-none border shadow-sm'
                   }`}
                 >
-                  <div className="flex items-center mb-1">
-                    {msg.sender !== 'You' && msg.sender !== 'AI Team' ? (
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs text-white mr-2 ${
-                        teamMembers.find(m => m.name === msg.sender)?.color
-                      }`}>
-                        {teamMembers.find(m => m.name === msg.sender)?.icon}
+                  <div className="flex items-center mb-2">
+                    {msg.sender === 'ai' ? (
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white mr-2 md:mr-3">
+                        <Bot className="w-4 h-4" />
                       </div>
-                    ) : null}
-                    <span className="font-semibold">
-                      {msg.sender}
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 mr-2 md:mr-3">
+                        👤
+                      </div>
+                    )}
+                    <span className="font-semibold text-sm md:text-base">
+                      {msg.sender === 'ai' ? 'AI Developer' : 'You'}
                     </span>
                     <span className="text-xs opacity-75 ml-3">
                       {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <p className="whitespace-pre-wrap">{msg.text}</p>
+                  <div className="whitespace-pre-wrap ml-9 md:ml-11 text-sm md:text-base">{msg.text}</div>
                 </div>
               </div>
-            ))}
-            
-            {isTeamThinking && (
-              <div className="flex justify-start">
-                <div className="bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-2xl rounded-bl-none px-4 py-3">
-                  <div className="flex items-center">
-                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center mr-2">
-                      <Bot className="w-4 h-4" />
+
+              {/* Generated Files */}
+              {msg.files && msg.files.length > 0 && (
+                <div className="mt-4 ml-9 md:ml-11 max-w-full md:max-w-3xl">
+                  <div className="bg-gray-900 text-gray-100 rounded-xl overflow-hidden">
+                    <div className="bg-gray-800 px-4 py-3 flex justify-between items-center">
+                      <div className="flex items-center">
+                        <Code className="w-4 h-4 mr-2" />
+                        <span className="font-medium">Generated Files ({msg.files.length})</span>
+                      </div>
+                      <button
+                        onClick={copyAllFiles}
+                        className="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded flex items-center"
+                      >
+                        {copiedFile === 'ALL' ? (
+                          <>
+                            <Check className="w-4 h-4 mr-1" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 mr-1" />
+                            Copy All
+                          </>
+                        )}
+                      </button>
                     </div>
-                    <span className="font-semibold">AI Team Thinking</span>
-                    <div className="ml-3 flex space-x-1">
-                      <div className="w-2 h-2 bg-white rounded-full animate-bounce" />
-                      <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                      <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                    <div className="p-1">
+                      {msg.files.slice(0, 3).map((file, idx) => (
+                        <div key={idx} className="m-2 bg-gray-800 rounded-lg overflow-hidden">
+                          <div className="px-4 py-2 bg-gray-700 flex justify-between items-center">
+                            <code className="text-sm font-mono truncate">{file.path}</code>
+                            <button
+                              onClick={() => copyFileToClipboard(file.content, file.path)}
+                              className="text-xs bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded flex items-center"
+                            >
+                              {copiedFile === file.path ? (
+                                <Check className="w-3 h-3 mr-1" />
+                              ) : (
+                                <Copy className="w-3 h-3 mr-1" />
+                              )}
+                              {copiedFile === file.path ? 'Copied' : 'Copy'}
+                            </button>
+                          </div>
+                          <pre className="p-4 text-xs md:text-sm overflow-x-auto max-h-48 overflow-y-auto">
+                            {file.content.substring(0, 500)}
+                            {file.content.length > 500 && '...'}
+                          </pre>
+                        </div>
+                      ))}
+                      {msg.files.length > 3 && (
+                        <div className="text-center py-2 text-gray-400 text-sm">
+                          + {msg.files.length - 3} more files
+                        </div>
+                      )}
                     </div>
                   </div>
+                  <div className="mt-2 text-sm text-gray-600">
+                    Copy files → Paste to GitHub → Deploy on Vercel
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          
+          {isGenerating && (
+            <div className="flex justify-start">
+              <div className="bg-white border rounded-2xl rounded-bl-none px-5 py-4 shadow-sm max-w-3xl">
+                <div className="flex items-center">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white mr-3">
+                    <Bot className="w-4 h-4" />
+                  </div>
+                  <span className="font-semibold">AI Building Your App</span>
+                  <div className="ml-3 flex space-x-1">
+                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" />
+                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-gray-600 ml-11">
+                  Analyzing requirements → Generating code → Creating files
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
 
-          {/* Input */}
-          <div className="border-t p-4">
-            <form onSubmit={handleSubmit} className="flex space-x-3">
+        {/* Input */}
+        <div className="border-t pt-6">
+          <form onSubmit={handleSubmit} className="max-w-6xl mx-auto">
+            <div className="flex space-x-3">
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Describe what you want to build..."
-                className="flex-1 p-3 border rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                disabled={isTeamThinking}
+                placeholder="Describe your app (e.g., 'Build a Twitter clone with Next.js 14')..."
+                className="flex-1 p-4 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                disabled={isGenerating}
               />
               <button
                 type="submit"
-                disabled={!input.trim() || isTeamThinking}
-                className="bg-primary-600 text-white px-6 py-3 rounded-xl font-semibold disabled:opacity-50 flex items-center"
+                disabled={!input.trim() || isGenerating}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4 rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 flex items-center shadow-md"
               >
-                <MessageSquare className="w-5 h-5" />
+                {isGenerating ? (
+                  <>
+                    <Sparkles className="w-5 h-5 mr-2 animate-pulse" />
+                    Building...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-5 h-5 mr-2" />
+                    Build
+                  </>
+                )}
               </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Team Sidebar */}
-        <div className="lg:w-1/3 bg-gray-50 p-6">
-          <div className="mb-8">
-            <h3 className="font-semibold text-lg mb-4 flex items-center">
-              <Users className="w-5 h-5 mr-2" />
-              Team Members
-            </h3>
-            <div className="space-y-3">
-              {teamMembers.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex items-center p-3 bg-white rounded-lg border hover:shadow-sm transition-shadow"
-                >
-                  <div className={`${member.color} w-10 h-10 rounded-full flex items-center justify-center text-white text-lg mr-3`}>
-                    {member.icon}
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-semibold">{member.name}</h4>
-                    <p className="text-sm text-gray-600">{member.role}</p>
-                  </div>
-                  <div className={`w-3 h-3 rounded-full ${member.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
-                </div>
-              ))}
             </div>
-          </div>
-
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-5">
-            <h3 className="font-semibold mb-3 flex items-center">
-              <Code className="w-5 h-5 mr-2" />
-              Quick Start
-            </h3>
-            <div className="space-y-3">
-              <button
-                onClick={() => setInput('Build a task management app with drag-drop')}
-                className="w-full text-left p-3 bg-white rounded-lg border hover:border-primary-500"
-              >
-                <div className="font-medium">Task Manager</div>
-                <div className="text-sm text-gray-600">Kanban board, tasks, teams</div>
-              </button>
-              <button
-                onClick={() => setInput('Create an e-commerce store')}
-                className="w-full text-left p-3 bg-white rounded-lg border hover:border-primary-500"
-              >
-                <div className="font-medium">E-commerce</div>
-                <div className="text-sm text-gray-600">Products, cart, payments</div>
-              </button>
-              <Link
-                href="/ai/builder"
-                className="block text-center p-3 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700"
-              >
-                Go to App Builder →
-              </Link>
+            <div className="flex justify-between mt-3 text-sm text-gray-500">
+              <div>
+                Press Enter to send • Upload specs for complex projects
+              </div>
+              <div className="flex items-center">
+                <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                Real AI (Gemini) Active
+              </div>
             </div>
-          </div>
+          </form>
         </div>
       </div>
     </div>
   )
-            }
+          }
