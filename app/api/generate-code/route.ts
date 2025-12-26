@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     
     console.log('Generating code for:', description.substring(0, 100))
     
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' })
     
     const prompt = `Generate a COMPLETE Next.js 14 application.
     
