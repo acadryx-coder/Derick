@@ -1,38 +1,59 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next-server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+const model = genAI.getGenerativeModel({ model: 'gemini-pro' })
+
+// Store conversation memory
+const userMemories = new Map()
 
 export async function POST(request: Request) {
   try {
-    const { message, history } = await request.json()
+    const { message, userId = 'default' } = await request.json()
     
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' })
+    // Get user's conversation history
+    const history = userMemories.get(userId) || []
     
-    const prompt = `You are an expert full-stack developer AI assistant.
-
-Conversation history:
-${history.map((h: any) => `${h.role}: ${h.content}`).join('\n')}
-
-User: ${message}
-
-Respond as a senior developer. Be specific about:
-1. Technical approach
-2. Recommended stack (Next.js 14, TypeScript, Tailwind)
-3. Architecture considerations
-4. Next steps
-
-Keep response concise but helpful. If user wants to build something, offer to generate code.`
-
+    // Build conversation context
+    const chatHistory = history
+      .map((msg: any) => `${msg.role}: ${msg.content}`)
+      .join('\n')
+    
+    const prompt = `You are an AI developer assistant. Chat naturally with users.
+    
+    Previous conversation:
+    ${chatHistory}
+    
+    User: ${message}
+    
+    Respond naturally like a human developer. If they want to build something, say you'll generate the code.
+    Be helpful, technical, and conversational.`
+    
     const result = await model.generateContent(prompt)
     const response = await result.response.text()
     
-    return NextResponse.json({ response })
-  } catch (error) {
-    console.error('AI Chat Error:', error)
-    return NextResponse.json(
-      { response: "I'm ready to help you build. Describe your app idea." },
-      { status: 200 }
+    // Store in memory
+    history.push(
+      { role: 'user', content: message },
+      { role: 'assistant', content: response }
     )
+    userMemories.set(userId, history.slice(-20)) // Keep last 20 messages
+    
+    return NextResponse.json({ 
+      response,
+      canGenerateCode: shouldGenerateCode(message)
+    })
+  } catch (error) {
+    return NextResponse.json({
+      response: `Hi! I'm your AI developer. What would you like to build today?`,
+      canGenerateCode: false
+    })
   }
 }
+
+function shouldGenerateCode(message: string): boolean {
+  const buildKeywords = ['build', 'create', 'make', 'generate', 'app', 'website', 'code']
+  return buildKeywords.some(keyword => 
+    message.toLowerCase().includes(keyword)
+  )
+  }
