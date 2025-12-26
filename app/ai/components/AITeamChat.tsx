@@ -1,23 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, FormEvent } from 'react'
-import { Send, Bot, User, Trash2 } from 'lucide-react'
-
-interface Message {
-  id: string
-  content: string
-  role: 'user' | 'assistant'
-  sender?: string
-  timestamp: Date
-}
-
-interface TeamMember {
-  id: string
-  name: string
-  role: string
-  color: string
-  icon: string
-}
+import { Send, Bot, Trash2 } from 'lucide-react'
+import type { Message, TeamMember } from '@/types/chat'
 
 export default function AITeamChat() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -271,4 +256,4 @@ export default function AITeamChat() {
       </div>
     </div>
   )
-  }
+}
