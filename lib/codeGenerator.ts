@@ -1,4 +1,5 @@
 import { ProjectFile } from '@/types/builder'
+
 export async function generateAppCode(
   description: string, 
   uploadedDocs: string[] = []
@@ -19,3 +20,7 @@ export async function generateAppCode(
     status: 'generated'
   }))
 }
+
+export async function debugBuildFailure(logs: string): Promise<string> {
+  return `AI Analysis of Build Failure: ${logs.substring(0, 200)}...`
+    }
