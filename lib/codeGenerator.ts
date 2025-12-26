@@ -1,3 +1,4 @@
+import { ProjectFile } from '@/types/builder'
 export async function generateAppCode(
   description: string, 
   uploadedDocs: string[] = []
