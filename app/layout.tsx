@@ -36,6 +36,9 @@ export default function RootLayout({
                   <a href="/ai" className="text-gray-700 hover:text-primary-600">
                     AI Team
                   </a>
+                  <a href="/ai/builder" className="text-gray-700 hover:text-primary-600 font-medium">
+                    App Builder
+                  </a>
                 </nav>
               </div>
             </div>
@@ -52,4 +55,4 @@ export default function RootLayout({
       </body>
     </html>
   )
-                      }
+}
